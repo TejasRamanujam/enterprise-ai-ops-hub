@@ -1,0 +1,141 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: ai-workflow
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: ai-workflow-backend:latest
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: ai-workflow-config
+            - secretRef:
+                name: ai-workflow-secrets
+          env:
+            - name: DATABASE_URL
+              value: "postgresql+asyncpg://postgres:$(POSTGRES_PASSWORD)@postgres:5432/ai_workflow"
+            - name: DATABASE_SYNC_URL
+              value: "postgresql://postgres:$(POSTGRES_PASSWORD)@postgres:5432/ai_workflow"
+            - name: REDIS_URL
+              value: "redis://:$(REDIS_PASSWORD)@redis:6379/0"
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "2Gi"
+              cpu: "2"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: ai-workflow
+spec:
+  selector:
+    app: backend
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-worker
+  namespace: ai-workflow
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: celery-worker
+  template:
+    metadata:
+      labels:
+        app: celery-worker
+    spec:
+      containers:
+        - name: celery-worker
+          image: ai-workflow-backend:latest
+          command: ["celery", "-A", "app.tasks.celery_app", "worker", "--loglevel=info", "--concurrency=4"]
+          envFrom:
+            - configMapRef:
+                name: ai-workflow-config
+            - secretRef:
+                name: ai-workflow-secrets
+          env:
+            - name: DATABASE_URL
+              value: "postgresql+asyncpg://postgres:$(POSTGRES_PASSWORD)@postgres:5432/ai_workflow"
+            - name: DATABASE_SYNC_URL
+              value: "postgresql://postgres:$(POSTGRES_PASSWORD)@postgres:5432/ai_workflow"
+            - name: REDIS_URL
+              value: "redis://:$(REDIS_PASSWORD)@redis:6379/0"
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "2"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-beat
+  namespace: ai-workflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: celery-beat
+  template:
+    metadata:
+      labels:
+        app: celery-beat
+    spec:
+      containers:
+        - name: celery-beat
+          image: ai-workflow-backend:latest
+          command: ["celery", "-A", "app.tasks.celery_app", "beat", "--loglevel=info"]
+          envFrom:
+            - configMapRef:
+                name: ai-workflow-config
+            - secretRef:
+                name: ai-workflow-secrets
+          env:
+            - name: DATABASE_URL
+              value: "postgresql+asyncpg://postgres:$(POSTGRES_PASSWORD)@postgres:5432/ai_workflow"
+            - name: DATABASE_SYNC_URL
+              value: "postgresql://postgres:$(POSTGRES_PASSWORD)@postgres:5432/ai_workflow"
+            - name: REDIS_URL
+              value: "redis://:$(REDIS_PASSWORD)@redis:6379/0"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"

@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+bases:
+  - ../../base
+
+patchesStrategicMerge:
+  - backend-patch.yaml
+
+images:
+  - name: ai-workflow-backend
+    newName: your-registry/ai-workflow-backend
+    newTag: latest
+  - name: ai-workflow-frontend
+    newName: your-registry/ai-workflow-frontend
+    newTag: latest
