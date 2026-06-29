@@ -8,10 +8,20 @@ from datetime import datetime
 from app.core.config import settings
 
 
+_connect_args = {}
+# psycopg3 + Neon pooled endpoint (pgbouncer): disable server-side prepared
+# statements, which aren't compatible with transaction pooling.
+if "+psycopg" in settings.DATABASE_URL:
+    _connect_args["prepare_threshold"] = None
+
 engine = create_async_engine(
     settings.DATABASE_URL,
     pool_size=settings.DATABASE_POOL_SIZE,
     max_overflow=settings.DATABASE_MAX_OVERFLOW,
+    pool_pre_ping=True,       # validate/replace connections dropped by Neon autosuspend
+    pool_recycle=300,
+    pool_timeout=30,
+    connect_args=_connect_args,
     echo=settings.DEBUG,
 )
 
